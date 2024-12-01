@@ -17,7 +17,10 @@ final class IconComponent implements ItemComponent {
 
 	public function getValue(): array {
 		return [
-			"texture" => $this->texture
+			"texture" => $this->texture,
+			"textures" => [
+				"default" => $this->texture
+			]
 		];
 	}
 

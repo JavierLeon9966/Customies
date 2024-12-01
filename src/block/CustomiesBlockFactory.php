@@ -27,6 +27,9 @@ use pocketmine\utils\SingletonTrait;
 use pocketmine\world\format\io\GlobalBlockStateHandlers;
 use function array_map;
 use function array_reverse;
+use function hash;
+use function strcmp;
+use function usort;
 
 final class CustomiesBlockFactory {
 	use SingletonTrait;
@@ -93,17 +96,12 @@ final class CustomiesBlockFactory {
 		$components = CompoundTag::create()
 			->setTag("minecraft:light_emission", CompoundTag::create()
 				->setByte("emission", $block->getLightLevel()))
-			->setTag("minecraft:block_light_filter", CompoundTag::create()
+			->setTag("minecraft:light_dampening", CompoundTag::create()
 				->setByte("lightLevel", $block->getLightFilter()))
 			->setTag("minecraft:destructible_by_mining", CompoundTag::create()
 				->setFloat("value", $block->getBreakInfo()->getHardness()))
-			->setTag("minecraft:destructible_by_explosion", CompoundTag::create()
-				->setFloat("value", $block->getBreakInfo()->getBlastResistance()))
 			->setTag("minecraft:friction", CompoundTag::create()
-				->setFloat("value", $block->getFrictionFactor()))
-			->setTag("minecraft:flammable", CompoundTag::create()
-				->setInt("catch_chance_modifier", $block->getFlameEncouragement())
-				->setInt("destroy_chance_modifier", $block->getFlammability()));
+				->setFloat("value", 1 - $block->getFrictionFactor()));
 
 		if($model !== null) {
 			foreach($model->toNBT() as $tagName => $tag){
@@ -181,5 +179,17 @@ final class CustomiesBlockFactory {
 
 		$this->blockPaletteEntries[] = new BlockPaletteEntry($identifier, new CacheableNbt($propertiesTag));
 		$this->blockFuncs[$identifier] = [$blockFunc, $serializer, $deserializer];
+
+		// 1.20.60 added a new "block_id" field which depends on the order of the block palette entries. Every time we
+		// insert a new block, we need to re-sort the block palette entries to keep in sync with the client.
+		usort($this->blockPaletteEntries, static function(BlockPaletteEntry $a, BlockPaletteEntry $b): int {
+			return strcmp(hash("fnv164", $a->getName()), hash("fnv164", $b->getName()));
+		});
+		foreach($this->blockPaletteEntries as $i => $entry) {
+			$root = $entry->getStates()->getRoot()
+				->setTag("vanilla_block_data", CompoundTag::create()
+					->setInt("block_id", 10000 + $i));
+			$this->blockPaletteEntries[$i] = new BlockPaletteEntry($entry->getName(), new CacheableNbt($root));
+		}
 	}
 }
